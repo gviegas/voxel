@@ -14,7 +14,7 @@ const FourCc = packed struct {
     @"3": u8,
 
     fn asChunkKind(self: @This()) ?ChunkKind {
-        const fourcc = @ptrCast([*]const u8, &self)[0..4];
+        const fourcc: *const [4]u8 = @ptrCast(&self);
         if (mem.eql(u8, fourcc, "MAIN")) return .main;
         if (mem.eql(u8, fourcc, "PACK")) return .pack;
         if (mem.eql(u8, fourcc, "SIZE")) return .size;
@@ -40,7 +40,7 @@ const Header = packed struct {
     const size_no_padding: u32 = 8;
 
     fn read(self: *@This(), reader: anytype) !void {
-        const data = @ptrCast([*]u8, self)[0..size_no_padding];
+        const data: *[size_no_padding]u8 = @ptrCast(self);
         try reader.readNoEof(data);
         self.toNativeEndian();
     }
@@ -58,7 +58,7 @@ const Chunk = packed struct {
     const size_no_padding: u32 = 12;
 
     fn read(self: *@This(), reader: anytype) !void {
-        const data = @ptrCast([*]u8, self)[0..size_no_padding];
+        const data: *[size_no_padding]u8 = @ptrCast(self);
         try reader.readNoEof(data);
         self.toNativeEndian();
     }
@@ -143,7 +143,7 @@ const SizePayload = packed struct {
     fn fromReader(chunk: Chunk, reader: anytype) !SizePayload {
         chunk.assertContents(.size, .{ 12, 12 }, .{ 0, 0 });
         var self: @This() = undefined;
-        const data = @ptrCast([*]u8, &self)[0..size_no_padding];
+        const data: *[size_no_padding]u8 = @ptrCast(&self);
         try reader.readNoEof(data);
         self.toNativeEndian();
         return self;
@@ -167,12 +167,12 @@ const XyziPayload = struct {
         var self: @This() = undefined;
         self.voxel_count = try reader.readIntLittle(i32);
         const byte_count = switch (self.voxel_count) {
-            0...max_voxels => @intCast(usize, self.voxel_count) * 4,
+            0...max_voxels => @as(usize, @intCast(self.voxel_count)) * 4,
             else => return error.BadStream,
         };
         self.voxels = try allocator.alloc(i32, byte_count / 4);
         errdefer allocator.free(self.voxels);
-        const data = @ptrCast([*]u8, self.voxels.ptr)[0..byte_count];
+        const data = @as([*]u8, @ptrCast(self.voxels.ptr))[0..byte_count];
         try reader.readNoEof(data);
         self.toNativeEndian();
         return self;
@@ -194,7 +194,7 @@ const RgbaPayload = struct {
     fn fromReader(chunk: Chunk, reader: anytype) !RgbaPayload {
         chunk.assertContents(.rgba, .{ size_no_padding, size_no_padding }, .{ 0, 0 });
         var self: @This() = undefined;
-        const data = @ptrCast([*]u8, &self.palette)[0..size_no_padding];
+        const data: *[size_no_padding]u8 = @ptrCast(&self.palette);
         try reader.readNoEof(data);
         self.toNativeEndian();
         return self;
