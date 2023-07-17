@@ -13,6 +13,27 @@ const FourCc = packed struct {
     @"2": u8,
     @"3": u8,
 
+    fn fromLiteral(str: *const [4:0]u8) @This() {
+        return .{
+            .@"0" = str[0],
+            .@"1" = str[1],
+            .@"2" = str[2],
+            .@"3" = str[3],
+        };
+    }
+
+    fn fromChunkKind(kind: ChunkKind) ?@This() {
+        switch (kind) {
+            .main => return fromLiteral("MAIN"),
+            .pack => return fromLiteral("PACK"),
+            .size => return fromLiteral("SIZE"),
+            .xyzi => return fromLiteral("XYZI"),
+            .rgba => return fromLiteral("RGBA"),
+            // TODO: Extensions
+            else => return null,
+        }
+    }
+
     fn asChunkKind(self: @This()) ?ChunkKind {
         const fourcc: *const [4]u8 = @ptrCast(&self);
         if (mem.eql(u8, fourcc, "MAIN")) return .main;
