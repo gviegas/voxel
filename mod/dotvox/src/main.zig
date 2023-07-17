@@ -257,9 +257,22 @@ const RgbaPayload = struct {
         return self;
     }
 
+    fn write(self: *@This(), writer: anytype) !void {
+        self.toLittleEndian();
+        defer self.toNativeEndian();
+        const data: *[size_no_padding]u8 = @ptrCast(&self.palette);
+        try writer.writeAll(data);
+    }
+
     fn toNativeEndian(self: *@This()) void {
         for (&self.palette) |*rgba| {
             rgba.* = mem.littleToNative(i32, rgba.*);
+        }
+    }
+
+    fn toLittleEndian(self: *@This()) void {
+        for (&self.palette) |*rgba| {
+            rgba.* = mem.nativeToLittle(i32, rgba.*);
         }
     }
 };
