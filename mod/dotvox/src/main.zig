@@ -210,14 +210,35 @@ const XyziPayload = struct {
         errdefer allocator.free(self.voxels);
         const data = @as([*]u8, @ptrCast(self.voxels.ptr))[0..byte_count];
         try reader.readNoEof(data);
+        self.voxel_count = mem.nativeToLittle(i32, self.voxel_count);
         self.toNativeEndian();
         return self;
     }
 
+    fn write(self: *@This(), writer: anytype) !void {
+        if (self.voxel_count != self.voxels.len) return error.InvalidData;
+        const byte_count = switch (self.voxel_count) {
+            0...max_voxels => @as(usize, @intCast(self.voxel_count)) * 4,
+            else => return error.InvalidData,
+        };
+        try writer.writeIntLittle(i32, self.voxel_count);
+        self.toLittleEndian();
+        defer self.toNativeEndian();
+        const data = @as([*]u8, @ptrCast(self.voxels.ptr))[0..byte_count];
+        try writer.writeAll(data);
+    }
+
     fn toNativeEndian(self: *@This()) void {
-        //self.voxel_count = mem.littleToNative(i32, voxel_count);
+        self.voxel_count = mem.littleToNative(i32, self.voxel_count);
         for (self.voxels) |*voxel| {
             voxel.* = mem.littleToNative(i32, voxel.*);
+        }
+    }
+
+    fn toLittleEndian(self: *@This()) void {
+        self.voxel_count = mem.nativeToLittle(i32, self.voxel_count);
+        for (self.voxels) |*voxel| {
+            voxel.* = mem.nativeToLittle(i32, voxel.*);
         }
     }
 };
