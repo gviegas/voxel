@@ -45,8 +45,19 @@ const Header = packed struct {
         self.toNativeEndian();
     }
 
+    fn write(self: *@This(), writer: anytype) !void {
+        self.toLittleEndian();
+        defer self.toNativeEndian();
+        const data: *[size_no_padding]u8 = @ptrCast(self);
+        try writer.writeAll(data);
+    }
+
     fn toNativeEndian(self: *@This()) void {
         self.version = mem.littleToNative(i32, self.version);
+    }
+
+    fn toLittleEndian(self: *@This()) void {
+        self.version = mem.nativeToLittle(i32, self.version);
     }
 };
 
