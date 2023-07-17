@@ -74,9 +74,21 @@ const Chunk = packed struct {
         self.toNativeEndian();
     }
 
+    fn write(self: *@This(), writer: anytype) !void {
+        self.toLittleEndian();
+        defer self.toNativeEndian();
+        const data: *[size_no_padding]u8 = @ptrCast(self);
+        try writer.writeAll(data);
+    }
+
     fn toNativeEndian(self: *@This()) void {
         self.length_n = mem.littleToNative(i32, self.length_n);
         self.length_m = mem.littleToNative(i32, self.length_m);
+    }
+
+    fn toLittleEndian(self: *@This()) void {
+        self.length_n = mem.nativeToLittle(i32, self.length_n);
+        self.length_m = mem.nativeToLittle(i32, self.length_m);
     }
 
     fn assertContents(
