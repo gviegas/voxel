@@ -172,10 +172,23 @@ const SizePayload = packed struct {
         return self;
     }
 
+    fn write(self: *@This(), writer: anytype) !void {
+        self.toLittleEndian();
+        defer self.toNativeEndian();
+        const data: *[size_no_padding]u8 = @ptrCast(self);
+        try writer.writeAll(data);
+    }
+
     fn toNativeEndian(self: *@This()) void {
         self.x = mem.littleToNative(i32, self.x);
         self.y = mem.littleToNative(i32, self.y);
         self.z = mem.littleToNative(i32, self.z);
+    }
+
+    fn toLittleEndian(self: *@This()) void {
+        self.x = mem.nativeToLittle(i32, self.x);
+        self.y = mem.nativeToLittle(i32, self.y);
+        self.z = mem.nativeToLittle(i32, self.z);
     }
 };
 
