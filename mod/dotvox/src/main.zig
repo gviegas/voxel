@@ -151,9 +151,9 @@ const PackPayload = packed struct {
         return .{ .model_count = try reader.readIntLittle(i32) };
     }
 
-    //fn toNativeEndian(self: *@This()) void {
-    //    self.model_count = mem.littleToNative(i32, self.model_count);
-    //}
+    fn write(self: *@This(), writer: anytype) !void {
+        try writer.writeIntLittle(i32, self.model_count);
+    }
 };
 
 const SizePayload = packed struct {
