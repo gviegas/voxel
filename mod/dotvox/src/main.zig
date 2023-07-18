@@ -449,8 +449,11 @@ pub const Data = struct {
         };
         try encoder.encodeHeader(&header);
 
+        var chunk: Chunk = undefined;
+        var payload: Payload = undefined;
+
         // 'MAIN' contains everything but the header
-        var main_chunk = Chunk{
+        chunk = .{
             .id = FourCc.fromLiteral("MAIN"),
             .length_n = 0,
             .length_m = blk: {
@@ -465,45 +468,45 @@ pub const Data = struct {
                 break :blk @intCast(m);
             },
         };
-        var main = Payload{ .main = {} };
-        try encoder.encodeChunk(&main_chunk, &main);
+        payload = .{ .main = {} };
+        try encoder.encodeChunk(&chunk, &payload);
 
         // 'PACK' must come before 'SIZE'/'XYZI' chunks
-        var pack_chunk = Chunk{
+        chunk = .{
             .id = FourCc.fromLiteral("PACK"),
             .length_n = PackPayload.size_no_padding,
             .length_m = 0,
         };
-        var pack = Payload{ .pack = .{ .model_count = @intCast(self.models.len) } };
-        try encoder.encodeChunk(&pack_chunk, &pack);
+        payload = .{ .pack = .{ .model_count = @intCast(self.models.len) } };
+        try encoder.encodeChunk(&chunk, &payload);
 
         // 'SIZE'/'XYZI' must be interleaved
         for (self.models) |model| {
-            var size_chunk = Chunk{
+            chunk = .{
                 .id = FourCc.fromLiteral("SIZE"),
                 .length_n = SizePayload.size_no_padding,
                 .length_m = 0,
             };
-            var size = Payload{ .size = model.size };
-            try encoder.encodeChunk(&size_chunk, &size);
+            payload = .{ .size = model.size };
+            try encoder.encodeChunk(&chunk, &payload);
 
-            var xyzi_chunk = Chunk{
+            chunk = .{
                 .id = FourCc.fromLiteral("XYZI"),
                 .length_n = try model.xyzi.size(),
                 .length_m = 0,
             };
-            var xyzi = Payload{ .xyzi = model.xyzi };
-            try encoder.encodeChunk(&xyzi_chunk, &xyzi);
+            payload = .{ .xyzi = model.xyzi };
+            try encoder.encodeChunk(&chunk, &payload);
         }
 
         // 'RGBA' must come last
-        var rgba_chunk = Chunk{
+        chunk = .{
             .id = FourCc.fromLiteral("RGBA"),
             .length_n = RgbaPayload.size_no_padding,
             .length_m = 0,
         };
-        var rgba = Payload{ .rgba = self.palette };
-        try encoder.encodeChunk(&rgba_chunk, &rgba);
+        payload = .{ .rgba = self.palette };
+        try encoder.encodeChunk(&chunk, &payload);
     }
 };
 
@@ -574,14 +577,6 @@ pub fn decode(reader: anytype, allocator: Allocator) !Data {
     // These come in pairs
     if (size_i != xyzi_i) return error.BadStream;
     return data;
-}
-
-// TODO: Maybe define this as Data method instead (will also need
-// new Data methods to add content)
-pub fn encode(data: *Data, writer: anytype) !void {
-    _ = data;
-    _ = writer;
-    @compileError("TODO");
 }
 
 test "basic decoding 3x3x3" {
