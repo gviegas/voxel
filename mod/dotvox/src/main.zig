@@ -353,8 +353,60 @@ fn Decoder(comptime ReaderType: type) type {
 }
 
 fn Encoder(comptime WriterType: type) type {
-    _ = WriterType;
-    @compileError("TODO");
+    return struct {
+        context: ?ChunkKind,
+        writer: WriterType,
+
+        fn init(writer: anytype) Encoder(@TypeOf(writer)) {
+            return .{
+                .context = null,
+                .writer = writer,
+            };
+        }
+
+        fn encodeHeader(self: *@This(), header: *Header) !void {
+            if (self.context != null) return error.BadContext;
+            try header.write(self.writer);
+            self.context = .main;
+        }
+
+        fn encodeChunk(self: *@This(), chunk: *Chunk, payload: *Payload) !void {
+            const context = self.context orelse return error.BadContext;
+            // TODO: Review context checks
+            switch (payload.*) {
+                .main => {
+                    if (context != .main) return error.BadContext;
+                    try chunk.write(self.writer);
+                },
+                .pack => |*pack| {
+                    if (context != .main) return error.BadContext;
+                    try chunk.write(self.writer);
+                    try pack.write(self.writer);
+                },
+                .size => |*size| {
+                    if (context != .main and context != .pack and context != .xyzi)
+                        return error.BadContext;
+                    try chunk.write(self.writer);
+                    try size.write(self.writer);
+                },
+                .xyzi => |*xyzi| {
+                    if (context != .size) return error.BadContext;
+                    try chunk.write(self.writer);
+                    try xyzi.write(self.writer);
+                },
+                .rgba => |*rgba| {
+                    if (context == .main or context == .size) return error.BadContext;
+                    try chunk.write(self.writer);
+                    try rgba.write(self.writer);
+                },
+                .ntrn, .ngrp, .nshp, .matl, .layr, .robj, .rcam, .note, .imap => {
+                    // TODO
+                    return error.UnknownChunk;
+                },
+            }
+            self.context = payload.*;
+        }
+    };
 }
 
 // TODO: Provide a way to convert this data into a format agnostic
