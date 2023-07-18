@@ -262,6 +262,12 @@ const XyziPayload = struct {
             voxel.* = mem.nativeToLittle(i32, voxel.*);
         }
     }
+
+    fn size(self: @This()) !i32 {
+        const n = 4 + self.voxels.len * 4;
+        if (n > 0x7fffffff) return error.Overflow;
+        return @intCast(n);
+    }
 };
 
 const RgbaPayload = struct {
@@ -452,7 +458,7 @@ pub const Data = struct {
                 var m = chnk_len + PackPayload.size_no_padding;
                 m += (chnk_len + SizePayload.size_no_padding) * self.models.len;
                 for (self.models) |model| {
-                    m += chnk_len + 4 + model.xyzi.voxels.len * 4;
+                    m += chnk_len + @as(usize, @intCast(try model.xyzi.size()));
                 }
                 m += chnk_len + RgbaPayload.size_no_padding;
                 if (m > 0x7fffffff) return error.Overflow;
@@ -481,11 +487,9 @@ pub const Data = struct {
             var size = Payload{ .size = model.size };
             try encoder.encodeChunk(&size_chunk, &size);
 
-            // TODO: This value should come from a XyziPayload method.
-            const n: i32 = @intCast(4 + model.xyzi.voxels.len * 4);
             var xyzi_chunk = Chunk{
                 .id = FourCc.fromLiteral("XYZI"),
-                .length_n = n,
+                .length_n = try model.xyzi.size(),
                 .length_m = 0,
             };
             var xyzi = Payload{ .xyzi = model.xyzi };
