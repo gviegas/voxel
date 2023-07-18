@@ -580,6 +580,44 @@ test "basic decoding 3x3x3" {
     try expectEqual(mem.eql(i32, &data.palette.palette, &[_]i32{0} ** 256), false);
 }
 
+test "basic encoding 3x3x3" {
+    const allocator = std.testing.allocator;
+
+    var stream = io.fixedBufferStream(&test_data);
+    var data = try decode(stream.reader(), allocator);
+    defer data.deinit();
+
+    // 8B from header + 12B from MAIN chunk + 1200B from MAIN contents
+    // TODO: Update the length when adding other chunks
+    var rw_buf = [_]u8{0} ** 1220;
+    var rw_strm = io.fixedBufferStream(&rw_buf);
+    try data.encode(rw_strm.writer());
+
+    try expectEqual(rw_strm.getPos(), rw_buf.len);
+
+    rw_strm.reset();
+    var data2 = try decode(rw_strm.reader(), allocator);
+    defer data2.deinit();
+
+    try expectEqual(rw_strm.getPos(), rw_buf.len);
+
+    try expectEqual(data2.models.len, 1);
+    try expectEqual(data2.models[0].size.x, 3);
+    try expectEqual(data2.models[0].size.y, 3);
+    try expectEqual(data2.models[0].size.z, 3);
+    try expectEqual(data2.models[0].xyzi.voxel_count, 3 * 3 * 3);
+    try expectEqual(data2.models[0].xyzi.voxels.len, 3 * 3 * 3);
+    try expectEqual(mem.eql(i32, &data2.palette.palette, &[_]i32{0} ** 256), false);
+
+    try expectEqual(data2.models.len, data.models.len);
+    try expectEqual(data2.models[0].size.x, data.models[0].size.x);
+    try expectEqual(data2.models[0].size.y, data.models[0].size.y);
+    try expectEqual(data2.models[0].size.z, data.models[0].size.z);
+    try expectEqual(data2.models[0].xyzi.voxel_count, data.models[0].xyzi.voxel_count);
+    try expectEqual(data2.models[0].xyzi.voxels.len, data.models[0].xyzi.voxels.len);
+    try expectEqual(data2.palette.palette, data.palette.palette);
+}
+
 /// Filled 3x3x3 voxel grid.
 // zig fmt: off
 const test_data = [22680]u8{
