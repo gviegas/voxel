@@ -512,6 +512,7 @@ pub fn decode(reader: anytype, allocator: Allocator) !Data {
 
     var header: Header = undefined;
     try decoder.decodeHeader(&header);
+    if (!mem.eql(u8, @as([*]u8, @ptrCast(&header))[0..4], "VOX ")) return error.BadStream;
     // TODO: What about versions greater than 150?
     if (header.version != 150) return error.VersionNotSupported;
 
