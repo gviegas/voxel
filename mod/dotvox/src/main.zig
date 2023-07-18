@@ -409,7 +409,7 @@ fn Encoder(comptime WriterType: type) type {
     };
 }
 
-// TODO: Provide a way to convert this data into a format agnostic
+// TODO: Provide a way to convert this data into a format-agnostic
 // voxel representation (which should be defined elsewhere)
 pub const Data = struct {
     allocator: Allocator,
@@ -436,6 +436,72 @@ pub const Data = struct {
         }
         self.allocator.free(self.models);
         self.models = &.{};
+    }
+
+    pub fn encode(self: *const @This(), writer: anytype) !void {
+        if (self.models.len == 0) return error.NoModels;
+
+        var encoder = Encoder(@TypeOf(writer)).init(writer);
+
+        var header = Header{
+            .magic = FourCc.fromLiteral("VOX "),
+            .version = 150,
+        };
+        try encoder.encodeHeader(&header);
+
+        var main_chunk = Chunk{
+            .id = FourCc.fromLiteral("MAIN"),
+            .length_n = 0,
+            .length_m = blk: {
+                const chk_len = @as(usize, Chunk.size_no_padding);
+                var m = chk_len + PackPayload.size_no_padding;
+                m += (chk_len + SizePayload.size_no_padding) * self.models.len;
+                for (self.models) |model| {
+                    m += chk_len + 4 + model.xyzi.voxels.len * 4;
+                }
+                m += chk_len + RgbaPayload.size_no_padding;
+                if (m > 0x7fffffff) return error.Overflow;
+                break :blk @intCast(m);
+            },
+        };
+        var main = Payload{ .main = {} };
+        try encoder.encodeChunk(&main_chunk, &main);
+
+        var pack_chunk = Chunk{
+            .id = FourCc.fromLiteral("PACK"),
+            .length_n = PackPayload.size_no_padding,
+            .length_m = 0,
+        };
+        var pack = Payload{ .pack = .{ .model_count = @intCast(self.models.len) } };
+        try encoder.encodeChunk(&pack_chunk, &pack);
+
+        for (self.models) |model| {
+            var size_chunk = Chunk{
+                .id = FourCc.fromLiteral("SIZE"),
+                .length_n = SizePayload.size_no_padding,
+                .length_m = 0,
+            };
+            var size = Payload{ .size = model.size };
+            try encoder.encodeChunk(&size_chunk, &size);
+
+            // TODO: This value should come from a XyziPayload method.
+            const n: i32 = @intCast(4 + model.xyzi.voxels.len * 4);
+            var xyzi_chunk = Chunk{
+                .id = FourCc.fromLiteral("XYZI"),
+                .length_n = n,
+                .length_m = 0,
+            };
+            var xyzi = Payload{ .xyzi = model.xyzi };
+            try encoder.encodeChunk(&xyzi_chunk, &xyzi);
+        }
+
+        var rgba_chunk = Chunk{
+            .id = FourCc.fromLiteral("RGBA"),
+            .length_n = RgbaPayload.size_no_padding,
+            .length_m = 0,
+        };
+        var rgba = Payload{ .rgba = self.palette };
+        try encoder.encodeChunk(&rgba_chunk, &rgba);
     }
 };
 
