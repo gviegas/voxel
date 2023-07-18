@@ -448,13 +448,13 @@ pub const Data = struct {
             .id = FourCc.fromLiteral("MAIN"),
             .length_n = 0,
             .length_m = blk: {
-                const chk_len = @as(usize, Chunk.size_no_padding);
-                var m = chk_len + PackPayload.size_no_padding;
-                m += (chk_len + SizePayload.size_no_padding) * self.models.len;
+                const chnk_len = @as(usize, Chunk.size_no_padding);
+                var m = chnk_len + PackPayload.size_no_padding;
+                m += (chnk_len + SizePayload.size_no_padding) * self.models.len;
                 for (self.models) |model| {
-                    m += chk_len + 4 + model.xyzi.voxels.len * 4;
+                    m += chnk_len + 4 + model.xyzi.voxels.len * 4;
                 }
-                m += chk_len + RgbaPayload.size_no_padding;
+                m += chnk_len + RgbaPayload.size_no_padding;
                 if (m > 0x7fffffff) return error.Overflow;
                 break :blk @intCast(m);
             },
@@ -513,11 +513,21 @@ pub fn decode(reader: anytype, allocator: Allocator) !Data {
 
     var data = try Data.init(allocator);
     errdefer data.deinit();
+
     var chunk: Chunk = undefined;
     var payload: Payload = undefined;
+
+    var remaining = blk: {
+        try decoder.decodeChunk(&chunk, &payload);
+        if (payload != .main) return error.BadStream;
+        break :blk chunk.length_m;
+    };
+
+    const chnk_len: i32 = Chunk.size_no_padding;
     var size_i: usize = 0;
     var xyzi_i: usize = 0;
-    dec: while (true) {
+
+    while (remaining > 0) {
         if (decoder.decodeChunk(&chunk, &payload)) {
             switch (payload) {
                 .pack => |pack| {
@@ -541,12 +551,17 @@ pub fn decode(reader: anytype, allocator: Allocator) !Data {
                     xyzi_i += 1;
                 },
                 .rgba => |rgba| data.palette = rgba,
+                .main => return error.BadStream,
                 else => {}, // TODO
             }
+            remaining -= chnk_len + @max(chunk.length_n, 0);
         } else |err| {
             switch (err) {
-                error.UnknownChunk => continue,
-                error.EndOfStream => break :dec,
+                error.UnknownChunk => {
+                    // Chunk itself is valid in this case
+                    remaining -= chnk_len + @max(chunk.length_n + chunk.length_m, 0);
+                    continue;
+                },
                 else => return err,
             }
         }
