@@ -318,6 +318,8 @@ fn Decoder(comptime ReaderType: type) type {
             self.context = .main;
         }
 
+        // NOTE: This method does not check if the chunks are correctly ordered
+        // relative to each other.
         fn decodeChunk(self: *@This(), chunk: *Chunk, payload: *Payload) !void {
             if (self.context == null) return error.BadContext;
             try chunk.read(self.reader);
@@ -370,41 +372,33 @@ fn Encoder(comptime WriterType: type) type {
             self.context = .main;
         }
 
+        // NOTE: This method does not check if the chunks are correctly ordered
+        // relative to each other.
         fn encodeChunk(self: *@This(), chunk: *Chunk, payload: *Payload) !void {
-            const context = self.context orelse return error.BadContext;
-            // TODO: Review context checks
+            if (self.context == null) return error.BadContext;
             switch (payload.*) {
-                .main => {
-                    if (context != .main) return error.BadContext;
-                    try chunk.write(self.writer);
-                },
+                .main => try chunk.write(self.writer),
                 .pack => |*pack| {
-                    if (context != .main) return error.BadContext;
                     try chunk.write(self.writer);
                     try pack.write(self.writer);
                 },
                 .size => |*size| {
-                    if (context != .main and context != .pack and context != .xyzi)
-                        return error.BadContext;
                     try chunk.write(self.writer);
                     try size.write(self.writer);
                 },
                 .xyzi => |*xyzi| {
-                    if (context != .size) return error.BadContext;
                     try chunk.write(self.writer);
                     try xyzi.write(self.writer);
                 },
                 .rgba => |*rgba| {
-                    if (context == .main or context == .size) return error.BadContext;
                     try chunk.write(self.writer);
                     try rgba.write(self.writer);
                 },
                 .ntrn, .ngrp, .nshp, .matl, .layr, .robj, .rcam, .note, .imap => {
                     // TODO
-                    return error.UnknownChunk;
+                    return error.ChunkNotSupported;
                 },
             }
-            self.context = payload.*;
         }
     };
 }
@@ -449,6 +443,7 @@ pub const Data = struct {
         };
         try encoder.encodeHeader(&header);
 
+        // 'MAIN' contains everything but the header
         var main_chunk = Chunk{
             .id = FourCc.fromLiteral("MAIN"),
             .length_n = 0,
@@ -467,6 +462,7 @@ pub const Data = struct {
         var main = Payload{ .main = {} };
         try encoder.encodeChunk(&main_chunk, &main);
 
+        // 'PACK' must come before 'SIZE'/'XYZI' chunks
         var pack_chunk = Chunk{
             .id = FourCc.fromLiteral("PACK"),
             .length_n = PackPayload.size_no_padding,
@@ -475,6 +471,7 @@ pub const Data = struct {
         var pack = Payload{ .pack = .{ .model_count = @intCast(self.models.len) } };
         try encoder.encodeChunk(&pack_chunk, &pack);
 
+        // 'SIZE'/'XYZI' must be interleaved
         for (self.models) |model| {
             var size_chunk = Chunk{
                 .id = FourCc.fromLiteral("SIZE"),
@@ -495,6 +492,7 @@ pub const Data = struct {
             try encoder.encodeChunk(&xyzi_chunk, &xyzi);
         }
 
+        // 'RGBA' must come last
         var rgba_chunk = Chunk{
             .id = FourCc.fromLiteral("RGBA"),
             .length_n = RgbaPayload.size_no_padding,
